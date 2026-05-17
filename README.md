@@ -505,3 +505,7 @@ Visualizations → Select type → Generate
 10. **Visualizations** - All plot types
 11. **Results** - Summary and export
 
+
+
+---
+*Built with AI assistance from [Claude (Anthropic)](https://claude.com/).*
