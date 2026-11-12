@@ -1,43 +1,100 @@
 // Pairwise alignment and distance trees ported from alignment_tree.py (pure functions, no DOM).
-// - globalAlign: Gotoh global alignment with affine gaps, the scores of the app's Bio.Align.PairwiseAligner
-//   (match 1, mismatch 0, gap open -0.5, gap extend -0.1; a gap of length L scores open + (L-1)*extend, end gaps too).
-//   The optimal score matches Biopython; when several alignments are optimal the one shown may differ from Biopython's.
-// - identityDistances: Bio.Phylo DistanceCalculator('identity') on '-'-padded sequences ('-' == '-' counts as a match).
+// - globalAlign: Gotoh global alignment with affine gaps (a gap of length L scores open + (L-1)*extend, end gaps too),
+//   with either match/mismatch scores (the app's alignment page: 1 / 0 / -0.5 / -0.1) or a substitution matrix
+//   (the tree: BLOSUM62, -10 / -0.5). As in Biopython, scores within epsilon 1e-6 are ties and ties go to M, then X,
+//   then Y, which reproduces Biopython's first optimal alignment (alignments[0]); the fixture tests compare the aligned strings exactly.
+//   Scores are kept in rolling rows; the traceback is one byte per cell (2 bits per state).
+// - alignmentDistances: 1 - identity (identical columns / alignment length) for every pair.
 // - upgma / nj: line-by-line ports of Bio.Phylo DistanceTreeConstructor (same pair choice, ties, branch lengths).
 // align_engine.test.mjs checks these against tests/fixtures/engine_fixture.json.
 import { parseFasta } from './seq_engine.js';
 
 const NEG = -Infinity;
+export const MAX_CELLS = 40000000;
+const EPS = 1e-6;  // Biopython PairwiseAligner.epsilon: scores within this are ties
 
-export function globalAlign(a, b, { match = 1, mismatch = 0, open = -0.5, extend = -0.1 } = {}) {
-  const n = a.length, m = b.length, W = m + 1, size = (n + 1) * W;
-  const M = new Float64Array(size).fill(NEG), X = new Float64Array(size).fill(NEG), Y = new Float64Array(size).fill(NEG);
-  // traceback: previous state (0 = M, 1 = X (gap in b), 2 = Y (gap in a)) for each state
-  const tM = new Uint8Array(size), tX = new Uint8Array(size), tY = new Uint8Array(size);
-  M[0] = 0;
-  for (let i = 1; i <= n; i++) { X[i * W] = open + (i - 1) * extend; tX[i * W] = i === 1 ? 0 : 1; }
-  for (let j = 1; j <= m; j++) { Y[j] = open + (j - 1) * extend; tY[j] = j === 1 ? 0 : 2; }
-  const best3 = (vM, vX, vY) => (vM >= vX && vM >= vY) ? 0 : (vX >= vY ? 1 : 2);
+// Scoring table: flat K x K Float64Array plus a letter -> index map (letters not in the alphabet map to 'X').
+export function matrixScorer(matrix) {
+  const K = matrix.alphabet.length, S = new Float64Array(K * K), idx = new Map();
+  [...matrix.alphabet].forEach((c, i) => idx.set(c, i));
+  matrix.scores.forEach((row, i) => row.forEach((v, j) => { S[i * K + j] = v; }));
+  const x = idx.get('X');
+  return { K, S, code: seq => Int32Array.from(seq, c => idx.has(c) ? idx.get(c) : x), letters: matrix.alphabet };
+}
+function matchScorer(seqA, seqB, match, mismatch) {
+  const letters = [...new Set(seqA + seqB)].join('') || 'A', K = letters.length, S = new Float64Array(K * K).fill(mismatch);
+  for (let i = 0; i < K; i++) S[i * K + i] = match;
+  const idx = new Map([...letters].map((c, i) => [c, i]));
+  return { K, S, code: seq => Int32Array.from(seq, c => idx.get(c)), letters };
+}
+
+export function globalAlign(a, b, { match = 1, mismatch = 0, open = -0.5, extend = -0.1, scorer = null } = {}) {
+  const sc = scorer || matchScorer(a, b, match, mismatch);
+  const n = a.length, m = b.length, W = m + 1;
+  if (n * m > MAX_CELLS) throw new Error(`Sequences too long to align (${n} x ${m} > ${MAX_CELLS} cells)`);
+  const A = sc.code(a), B = sc.code(b), K = sc.K, S = sc.S;
+  let pM = new Float64Array(W).fill(NEG), pX = new Float64Array(W).fill(NEG), pY = new Float64Array(W).fill(NEG);
+  let cM = new Float64Array(W), cX = new Float64Array(W), cY = new Float64Array(W);
+  const tb = new Uint8Array((n + 1) * W);  // bits 0-1: M's previous state, 2-3: X's, 4-5: Y's (0 M, 1 X, 2 Y)
+  pM[0] = 0;
+  for (let j = 1; j <= m; j++) { pY[j] = open + (j - 1) * extend; tb[j] = (j === 1 ? 0 : 2) << 4; }
   for (let i = 1; i <= n; i++) {
+    cM[0] = NEG; cY[0] = NEG; cX[0] = open + (i - 1) * extend; tb[i * W] = (i === 1 ? 0 : 1) << 2;
+    const row = A[i - 1] * K;
     for (let j = 1; j <= m; j++) {
-      const c = i * W + j, d = c - W - 1, u = c - W, l = c - 1;
-      const s = a[i - 1] === b[j - 1] ? match : mismatch;
-      let k = best3(M[d], X[d], Y[d]); M[c] = [M[d], X[d], Y[d]][k] + s; tM[c] = k;
-      const xo = [M[u] + open, X[u] + extend, Y[u] + open]; k = best3(...xo); X[c] = xo[k]; tX[c] = k;
-      const yo = [M[l] + open, X[l] + open, Y[l] + extend]; k = best3(...yo); Y[c] = yo[k]; tY[c] = k;
+      let v, k, t;
+      // M: diagonal from (i-1, j-1)
+      v = pM[j - 1]; k = 0;
+      if (pX[j - 1] > v + EPS) { v = pX[j - 1]; k = 1; }
+      if (pY[j - 1] > v + EPS) { v = pY[j - 1]; k = 2; }
+      cM[j] = v + S[row + B[j - 1]]; t = k;
+      // X: gap in b, from (i-1, j)
+      v = pM[j] + open; k = 0;
+      if (pX[j] + extend > v + EPS) { v = pX[j] + extend; k = 1; }
+      if (pY[j] + open > v + EPS) { v = pY[j] + open; k = 2; }
+      cX[j] = v; t |= k << 2;
+      // Y: gap in a, from (i, j-1)
+      v = cM[j - 1] + open; k = 0;
+      if (cX[j - 1] + open > v + EPS) { v = cX[j - 1] + open; k = 1; }
+      if (cY[j - 1] + extend > v + EPS) { v = cY[j - 1] + extend; k = 2; }
+      cY[j] = v; tb[i * W + j] = t | (k << 4);
     }
+    [pM, cM] = [cM, pM]; [pX, cX] = [cX, pX]; [pY, cY] = [cY, pY];
   }
-  const end = n * W + m;
-  let state = best3(M[end], X[end], Y[end]);
-  const score = [M[end], X[end], Y[end]][state];
-  let i = n, j = m, top = [], bot = [];
+  const ends = [pM[m], pX[m], pY[m]];
+  let state = 0;
+  if (n === 0 && m === 0) state = 0;
+  else { if (ends[1] > ends[state] + EPS) state = 1; if (ends[2] > ends[state] + EPS) state = 2; }
+  const score = ends[state];
+  let i = n, j = m;
+  const top = [], bot = [];
   while (i > 0 || j > 0) {
-    const c = i * W + j;
-    if (state === 0) { top.push(a[i - 1]); bot.push(b[j - 1]); state = tM[c]; i--; j--; }
-    else if (state === 1) { top.push(a[i - 1]); bot.push('-'); state = tX[c]; i--; }
-    else { top.push('-'); bot.push(b[j - 1]); state = tY[c]; j--; }
+    const t = tb[i * W + j];
+    if (state === 0) { top.push(a[i - 1]); bot.push(b[j - 1]); state = t & 3; i--; j--; }
+    else if (state === 1) { top.push(a[i - 1]); bot.push('-'); state = (t >> 2) & 3; i--; }
+    else { top.push('-'); bot.push(b[j - 1]); state = (t >> 4) & 3; j--; }
   }
   return { score, aligned1: top.reverse().join(''), aligned2: bot.reverse().join('') };
+}
+
+const identityOf = (t, u) => {
+  let same = 0;
+  for (let k = 0; k < t.length; k++) if (t[k] === u[k] && t[k] !== '-') same++;
+  return t.length ? same / t.length : 0;
+};
+
+// alignment_tree.alignment_distances: residues missing from the matrix are aligned as X (as in Python).
+export function alignmentDistances(ids, seqs, tcfg) {
+  const sc = matrixScorer(tcfg.matrix), n = seqs.length, d = ids.map(() => Array(n).fill(0)), pairs = [];
+  const clean = seqs.map(s => [...s].map(c => tcfg.matrix.alphabet.includes(c) ? c : 'X').join(''));
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    if (clean[i].length * clean[j].length > MAX_CELLS) throw new Error(`${ids[i]} x ${ids[j]} is too long to align (limit ${MAX_CELLS} cells)`);
+    const r = globalAlign(clean[i], clean[j], { open: tcfg.gap_open, extend: tcfg.gap_extend, scorer: sc });
+    const identity = identityOf(r.aligned1, r.aligned2);
+    d[i][j] = d[j][i] = 1.0 - identity;
+    pairs.push({ i, j, score: r.score, identity, length: r.aligned1.length, aligned1: r.aligned1, aligned2: r.aligned2 });
+  }
+  return { distances: d, pairs };
 }
 
 // Score an existing gapped pair with the same scheme (used by the tests and as a self-check).
@@ -55,21 +112,10 @@ export function pairwiseAlignments(ids, seqs, cfg) {
   const p = { match: cfg.match, mismatch: cfg.mismatch, open: cfg.gap_open, extend: cfg.gap_extend }, out = [];
   for (let i = 0; i < seqs.length; i++) for (let j = i + 1; j < seqs.length; j++) {
     const r = globalAlign(seqs[i].slice(0, cfg.prefix), seqs[j].slice(0, cfg.prefix), p);
-    let same = 0;
-    for (let k = 0; k < r.aligned1.length; k++) if (r.aligned1[k] === r.aligned2[k] && r.aligned1[k] !== '-') same++;
     out.push({ i, j, seq1: ids[i], seq2: ids[j], score: r.score, aligned1: r.aligned1, aligned2: r.aligned2,
-      identity: r.aligned1.length ? same / r.aligned1.length : 0 });
+      identity: identityOf(r.aligned1, r.aligned2) });
   }
   return out;
-}
-
-export function identityDistances(seqs) {
-  const L = Math.max(...seqs.map(s => s.length)), pad = seqs.map(s => s + '-'.repeat(L - s.length));
-  return pad.map(a => pad.map(b => {
-    let same = 0;
-    for (let k = 0; k < L; k++) if (a[k] === b[k]) same++;
-    return L === 0 ? 1 : 1 - same / L;
-  }));
 }
 
 const leaf = name => ({ name, branch_length: 0, children: [] });
@@ -141,14 +187,19 @@ export function alignBundle(fasta, cfg) {
   const ids = records.map(r => r.id);
   return { ids, prefix: a.prefix, pairs: pairwiseAlignments(ids, records.map(r => r.sequence), a), warnings };
 }
-export function treeBundle(fasta, method = 'UPGMA') {
-  const { records, warnings } = parseFasta(fasta);
+let lastTree = null;  // the alignments are the slow part: reuse them when only the method changes
+export function treeBundle(fasta, cfg, method = 'UPGMA') {
+  const { records, warnings } = parseFasta(fasta), t = cfg.tree;
   method = String(method).toUpperCase();
   if (!['UPGMA', 'NJ'].includes(method)) throw new Error('method must be UPGMA or NJ');
+  if (records.length > t.max_sequences) throw new Error(`At most ${t.max_sequences} sequences for a tree`);
   if (records.length < 3) throw new Error('Need at least 3 sequences for tree construction');
   const ids = records.map(r => r.id);
   if (new Set(ids).size !== ids.length) throw new Error('Sequence ids must be unique to build a tree');
-  const distances = identityDistances(records.map(r => r.sequence));
+  const key = JSON.stringify([ids, records.map(r => r.sequence)]);
+  if (!lastTree || lastTree.key !== key) lastTree = { key, ...alignmentDistances(ids, records.map(r => r.sequence), t) };
+  const { distances, pairs } = lastTree;
   const tree = method === 'UPGMA' ? upgma(ids, distances) : nj(ids, distances);
-  return { ids, method, distances, tree, newick: newick(tree), warnings };
+  return { ids, method, distances, pairs: pairs.map(({ i, j, score, identity, length }) => ({ i, j, score, identity, length })),
+    tree, newick: newick(tree), warnings };
 }

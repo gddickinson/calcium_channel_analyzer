@@ -12,7 +12,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from alignment_tree import (ALIGN_PREFIX, GAP_EXTEND, GAP_OPEN, MATCH, MISMATCH,  # noqa: E402
-                            build_tree, identity_distances, pairwise_alignments, tree_to_dict, tree_to_newick)
+                            MAX_CELLS, TREE_GAP_EXTEND, TREE_GAP_OPEN, TREE_MATRIX,
+                            alignment_distances, build_tree, pairwise_alignments, tree_matrix, tree_to_dict,
+                            tree_to_newick)
 from channel_rules import classify_channel, predict_electrophysiology  # noqa: E402
 from config import AMINO_ACIDS, CHANNEL_FAMILIES, DOMAIN_PATTERNS, KD_HYDROPHOBICITY  # noqa: E402
 from domain_detection import detect_domains_in_sequence, predict_family_from_description  # noqa: E402
@@ -21,6 +23,7 @@ from sequence_analysis import TM_THRESHOLD, TM_WINDOW, parse_fasta, tm_predictio
 
 EXAMPLE_FASTA = ROOT / "example_ca_channels.fasta"
 MAX_ALIGN_SEQS = 12
+MAX_TREE_SEQS = 30
 FEATURE_NAMES = (["length"] + [f"frac_{aa}" for aa in AMINO_ACIDS] + ["mean_kd_hydropathy"]
                  + [f"has_{d}" for d in DOMAIN_PATTERNS])
 
@@ -36,7 +39,14 @@ def config_payload() -> dict:
         "tm": {"window": TM_WINDOW, "threshold": TM_THRESHOLD},
         "align": {"prefix": ALIGN_PREFIX, "match": MATCH, "mismatch": MISMATCH,
                   "gap_open": GAP_OPEN, "gap_extend": GAP_EXTEND, "max_sequences": MAX_ALIGN_SEQS},
+        "tree": {"matrix_name": TREE_MATRIX, "gap_open": TREE_GAP_OPEN, "gap_extend": TREE_GAP_EXTEND,
+                 "max_cells": MAX_CELLS, "max_sequences": MAX_TREE_SEQS, "matrix": _matrix_payload()},
     }
+
+
+def _matrix_payload() -> dict:
+    m = tree_matrix()
+    return {"alphabet": m.alphabet, "scores": [[float(m[a, b]) for b in m.alphabet] for a in m.alphabet]}
 
 
 def example_fasta() -> str:
@@ -99,11 +109,20 @@ def align(fasta: str) -> dict:
 
 
 def tree(fasta: str, method: str = "UPGMA") -> dict:
+    """UPGMA / NJ tree from 1 - identity of pairwise global alignments (alignment_tree.alignment_distances)."""
     records, warnings = parse_fasta(fasta)
     method = method.upper()
     if method not in ("UPGMA", "NJ"):
         raise ValueError("method must be UPGMA or NJ")
+    if len(records) > MAX_TREE_SEQS:
+        raise ValueError(f"At most {MAX_TREE_SEQS} sequences for a tree")
     ids, seqs = [r["id"] for r in records], [r["sequence"] for r in records]
-    t = build_tree(ids, seqs, method)
-    return {"ids": ids, "method": method, "distances": identity_distances(ids, seqs),
+    if len(seqs) < 3:
+        raise ValueError("Need at least 3 sequences for tree construction")
+    if len(set(ids)) != len(ids):
+        raise ValueError("Sequence ids must be unique to build a tree")
+    distances, pairs = alignment_distances(ids, seqs)
+    t = build_tree(ids, seqs, method, distances)
+    return {"ids": ids, "method": method, "distances": distances,
+            "pairs": [{k: p[k] for k in ("i", "j", "score", "identity", "length")} for p in pairs],
             "tree": tree_to_dict(t.root), "newick": tree_to_newick(t), "warnings": warnings}

@@ -14,12 +14,14 @@ calcium_channel_analyzer/
                                   tm_prediction() (the GUI's predict_tm_domains logic)
   channel_rules.py             -- GUI-free: classify_channel(), predict_electrophysiology(), channel_markers()
                                   (the GUI's classify_channels / predict_electrophysiology rules)
-  alignment_tree.py            -- GUI-free (Biopython): make_aligner(), pairwise_alignments(), identity_distances(),
-                                  build_tree(), tree_to_dict(), tree_to_newick() (the GUI's alignment/tree settings)
+  alignment_tree.py            -- GUI-free (Biopython): make_aligner(), pairwise_alignments() (the GUI's alignment
+                                  settings); make_tree_aligner(), alignment_distances() (BLOSUM62 global alignments,
+                                  1 - identity), build_tree() (UPGMA/NJ), tree_to_dict(), tree_to_newick()
   requirements.txt             -- Python dependencies (desktop app)
   requirements-web.txt         -- Pinned dependencies for the web app and its tests
   run_web.py                   -- Starts the web app on http://127.0.0.1:8135
-  example_ca_channels.fasta    -- Example FASTA (placeholder sequences with UniProt-style headers)
+  example_ca_channels.fasta    -- Example FASTA: 7 UniProtKB/Swiss-Prot calcium channels (see THIRD_PARTY.md)
+  THIRD_PARTY.md               -- Source, date, checksum and licence (CC BY 4.0) of the example sequences
   DOCUMENTATION.md             -- User documentation
   web/
     app.py                     -- FastAPI: GET /api/info|config|examples (exported to the static site),
@@ -38,6 +40,7 @@ calcium_channel_analyzer/
     test_domain_detection.py   -- Tests for domain detection and family prediction
     test_ml_features.py        -- Tests for ML feature extraction
     test_gui_free_modules.py   -- Tests for sequence_analysis, channel_rules, alignment_tree (+ drift guard vs GUI)
+    test_tree_alignment.py     -- Alignment-based tree distances on two synthetic families with an indel
     test_engine_fixture.py     -- The JS fixture is current (rtol 1e-9)
     test_web.py                -- API, static build and node engine tests
   .github/workflows/pages.yml  -- Builds and publishes the static site on push to main
@@ -58,5 +61,6 @@ calcium_channel_analyzer/
 - `domain_detection.py`, `ml_features.py`, `sequence_analysis.py`, `channel_rules.py` -- import from `config`
 - `alignment_tree.py` -- Biopython only
 - `calcium_channel_analyzer.py` -- imports config, domain_detection, ml_features (its TM, classification, alignment
-  and tree code is still inline; the GUI-free modules copy it, and tests/test_gui_free_modules.py checks the settings)
+  and tree code is still inline; the GUI-free modules copy it, and tests/test_gui_free_modules.py checks the settings;
+  its own Detect Domains and tree differ from the web's, see SESSION_LOG.md)
 - `web/analysis.py` -- imports all the analysis modules; `web/app.py` imports `web/analysis.py` and `web/fetch.py`

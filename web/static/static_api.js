@@ -22,7 +22,7 @@ export async function staticApi(path, body) {
     case 'hydropathy': return hydropathyBundle(body.fasta, cfg, body.index ?? 0, body.window ?? cfg.tm.window, body.threshold ?? cfg.tm.threshold);
     case 'classify': return classifyBundle(body.fasta, cfg);
     case 'align': return alignBundle(body.fasta, cfg);
-    case 'tree': return treeBundle(body.fasta, body.method);
+    case 'tree': return treeBundle(body.fasta, cfg, body.method);
     case 'fetch': throw new Error('Fetching from NCBI or UniProt ' + NEEDS_SERVER + '.');
     default: throw new Error('Unknown API path ' + clean);
   }

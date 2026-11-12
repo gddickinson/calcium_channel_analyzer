@@ -319,7 +319,7 @@ locally with the full Python back end.
 Pages: **Sequences** (the example FASTA, or paste/open your own), **Domain motifs** (`detect_domains_in_sequence`,
 domain map and counts), **Hydropathy & TM** (Kyte-Doolittle, window 19, threshold 1.6), **Classification & features**
 (the rule-based classifier, electrophysiology labels and the 32 ML features), **Pairwise alignment** (the desktop app's
-PairwiseAligner settings) and **Distance tree** (identity distances, UPGMA / NJ).
+PairwiseAligner settings) and **Distance tree** (1 - identity of pairwise BLOSUM62 global alignments, UPGMA / NJ).
 
 ### Run the web app
 ```bash

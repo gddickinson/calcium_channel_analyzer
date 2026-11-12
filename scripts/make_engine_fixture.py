@@ -45,7 +45,14 @@ def bundle(fasta: str) -> dict:
         "align": analysis.align(fasta),
         "tree_upgma": analysis.tree(fasta, "UPGMA"),
         "tree_nj": analysis.tree(fasta, "NJ"),
+        "tree_alignments": tree_alignments(fasta),
     }
+
+
+def tree_alignments(fasta: str) -> list:
+    """The BLOSUM62 alignments behind the tree distances, with the aligned strings (JS must reproduce them exactly)."""
+    recs = analysis.parse(fasta)["records"]
+    return analysis.alignment_distances([r["id"] for r in recs], [r["sequence"] for r in recs])[1]
 
 
 def make() -> dict:

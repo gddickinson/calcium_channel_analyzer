@@ -1,5 +1,5 @@
-// Distance tree: the desktop app's "Phylogenetic Tree" action (identity distances of '-'-padded sequences,
-// Bio.Phylo UPGMA or NJ), drawn as a phylogram, with the distance matrix and Newick text.
+// Distance tree: 1 - identity of pairwise global alignments (BLOSUM62), Bio.Phylo UPGMA or NJ (alignment_tree.py),
+// drawn as a phylogram, with the distance matrix and Newick text.
 import { $, $$, app, download, esc, route } from './core.js';
 import { analyse, seqbar, warningsHtml } from './state.js';
 import { f, heat, label, svg } from './ui.js';
@@ -44,14 +44,16 @@ route('tree', async (args, q) => {
   let method = (q.m || 'UPGMA').toUpperCase() === 'NJ' ? 'NJ' : 'UPGMA';
   app().innerHTML = `
   <h1>Distance tree</h1>${await seqbar()}
-  <p class="lead">As in the desktop app: sequences are padded with '-' to equal length (no multiple alignment), distances are
-    1 − identical positions / padded length (Bio.Phylo "identity" model, where two pad characters count as identical), and
-    the tree is built with Bio.Phylo's UPGMA or neighbour joining. It compares residues position by position from the
-    N-terminus, so read it as a sketch, not a phylogeny.</p>
+  <p class="lead">Every pair is aligned end to end (Needleman-Wunsch with affine gaps: BLOSUM62, gap open −10, extend −0.5);
+    the distance is 1 − identity, identity being identical columns / alignment length. The tree is built from these distances
+    with Bio.Phylo's UPGMA or neighbour joining. Pairwise distances are a quick guide, not a phylogeny from a multiple
+    alignment and a substitution model. (The desktop app's tree compares unaligned sequences position by position instead.)</p>
   <div class="seg" role="group" aria-label="Tree method"><button data-m="UPGMA">UPGMA</button><button data-m="NJ">Neighbour joining</button></div>
   <div id="out"></div>`;
   const run = async () => {
     $$('.seg button').forEach(b => b.classList.toggle('on', b.dataset.m === method));
+    $('#out').innerHTML = '<p class="mute">Aligning every pair (full length; a few seconds for long channels)...</p>';
+    await new Promise(res => setTimeout(res, 30));
     let r;
     try { r = await analyse('tree', { method }); } catch (e) { $('#out').innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
     const flat = r.distances.flat().filter(v => v > 0), lo = Math.min(...flat), hi = Math.max(...flat);
@@ -59,7 +61,7 @@ route('tree', async (args, q) => {
       <div class="panel plot">${drawTree(r.tree)}</div>
       <p class="small mute">${method === 'NJ' ? 'Neighbour-joining trees are unrooted; the drawing hangs them from the last join, as Bio.Phylo returns them.'
         : 'Bio.Phylo\'s UPGMA updates distances as the plain average of the two merged rows.'}</p>
-      <h2>Identity distances</h2>
+      <h2>Distances (1 − identity)</h2>
       <div class="scroll"><table class="heat"><thead><tr><th></th>${r.ids.map(id => `<th class="mini">${esc(label(id))}</th>`).join('')}</tr></thead><tbody>${
         r.distances.map((row, i) => `<tr><td class="mini">${esc(label(r.ids[i]))}</td>${row.map((v, j) => `<td class="v" style="${i === j ? '' : heat(hi > lo ? 1 - (v - lo) / (hi - lo) : 0.5)}">${f(v, 3)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
       <h2>Newick</h2><pre id="nw">${esc(r.newick)}</pre><button class="alt" id="dl">Download .nwk</button>`;

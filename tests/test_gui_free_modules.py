@@ -1,9 +1,8 @@
 """Tests for the GUI-free modules factored out for the web app: sequence_analysis, channel_rules, alignment_tree.
 
 They copy logic that is still inline in calcium_channel_analyzer.py; test_desktop_constants_unchanged guards against
-the two drifting apart (it reads the desktop source as text, so Tkinter is not needed).
+the two drifting apart (the tree is deliberately different: the web aligns pairs, the desktop app pads) (it reads the desktop source as text, so Tkinter is not needed).
 """
-import re
 import sys
 from pathlib import Path
 
@@ -12,7 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from alignment_tree import build_tree, identity_distances, make_aligner, pairwise_alignments  # noqa: E402
+from alignment_tree import alignment_distances, build_tree, make_aligner, pairwise_alignments  # noqa: E402
 from channel_rules import classify_channel, predict_electrophysiology  # noqa: E402
 from sequence_analysis import FastaError, hydropathy_profile, parse_fasta, predict_tm_regions, tm_prediction  # noqa: E402
 
@@ -66,9 +65,11 @@ def test_alignment_and_tree():
     assert make_aligner().score("ACDEFGHIK", "ACDGHIKKK") == pytest.approx(5.8)
     pairs = pairwise_alignments(["a", "b"], ["ACDEFGHIK", "ACDGHIKKK"])
     assert pairs[0]["aligned1"].replace("-", "") == "ACDEFGHIK"
-    d = identity_distances(["a", "b"], ["AAAA", "AA"])
-    assert d[0][1] == pytest.approx(0.5)  # 'A'/'A' x2 match, 'A'/'-' x2 differ
-    assert d[0][0] == 0
+    d, pairs = alignment_distances(["a", "b"], ["AAAA", "AA"])
+    assert d[0][1] == pytest.approx(0.5)  # AAAA / AA-- (or a shift): 2 identical of 4 columns
+    assert d[0][0] == 0 and pairs[0]["length"] == 4
+    d, _ = alignment_distances(["a", "b"], ["MKUV", "MKXV"])  # U is not in BLOSUM62: scored as X
+    assert d[0][1] == pytest.approx(0.0)
     with pytest.raises(ValueError):
         build_tree(["a", "b"], ["AA", "AC"])
 
@@ -80,5 +81,3 @@ def test_desktop_constants_unchanged():
     al = src[src.index("def run_alignment"):src.index("def build_tree")]
     for s in ("match_score = 1", "mismatch_score = 0", "open_gap_score = -0.5", "extend_gap_score = -0.1", "[:500]"):
         assert s in al
-    tr = src[src.index("def build_tree"):src.index("def plot_tree")]
-    assert "DistanceCalculator('identity')" in tr and re.search(r"'-' \* \(max_len - len\(s\)\)", tr)

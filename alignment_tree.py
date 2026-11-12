@@ -8,26 +8,31 @@ Tree" actions, as pure functions (Biopython, no Tkinter):
   - make_aligner()          PairwiseAligner: global, match 1, mismatch 0,
                             gap open -0.5, gap extend -0.1
   - pairwise_alignments()   all pairs, each sequence cut to its first 500 aa
-  - identity_distances()    sequences padded with '-' to equal length (no MSA),
-                            Bio.Phylo DistanceCalculator('identity')
-  - build_tree()            UPGMA or NJ (Bio.Phylo DistanceTreeConstructor)
+  - alignment_distances()   1 - identity of each pair's Needleman-Wunsch (Gotoh)
+                            global alignment: BLOSUM62, gap open -10, gap extend
+                            -0.5, end gaps scored like internal gaps; identity =
+                            identical columns / alignment length
+  - build_tree()            UPGMA or NJ (Bio.Phylo DistanceTreeConstructor) on
+                            those distances
   - tree_to_dict()          nested {name, branch_length, children} for JSON
 
-As in the desktop app, the tree is built from unaligned, end-padded
-sequences, so it reflects position-by-position identity from the N-terminus,
-not homology from a multiple sequence alignment.
+The desktop app's own tree pads unaligned sequences with '-' and compares them
+position by position; that loses the register after any insertion or deletion,
+so the web app and these functions use pairwise alignments instead. The
+alignment used for the identity is Biopython's first optimal alignment
+(alignments[0]); the JS port reproduces it (tests/fixtures).
 """
 
 from typing import Dict, List, Sequence
 
 from Bio import Phylo
-from Bio.Align import MultipleSeqAlignment, PairwiseAligner
-from Bio.Phylo.TreeConstruction import DistanceCalculator, DistanceTreeConstructor
-from Bio.Seq import Seq
-from Bio.SeqRecord import SeqRecord
+from Bio.Align import PairwiseAligner, substitution_matrices
+from Bio.Phylo.TreeConstruction import DistanceMatrix, DistanceTreeConstructor
 
 ALIGN_PREFIX = 500
 MATCH, MISMATCH, GAP_OPEN, GAP_EXTEND = 1.0, 0.0, -0.5, -0.1
+TREE_MATRIX, TREE_GAP_OPEN, TREE_GAP_EXTEND = "BLOSUM62", -10.0, -0.5
+MAX_CELLS = 40_000_000  # longest pair product for one alignment (RyR2 x RyR2 is about 25M)
 
 
 def make_aligner() -> PairwiseAligner:
@@ -59,29 +64,62 @@ def pairwise_alignments(ids: Sequence[str], seqs: Sequence[str], prefix: int = A
     return out
 
 
-def padded_alignment(ids: Sequence[str], seqs: Sequence[str]) -> MultipleSeqAlignment:
-    max_len = max(len(s) for s in seqs)
-    return MultipleSeqAlignment(
-        [SeqRecord(Seq(s + "-" * (max_len - len(s))), id=i) for s, i in zip(seqs, ids)]
-    )
+def tree_matrix():
+    return substitution_matrices.load(TREE_MATRIX)
 
 
-def identity_distances(ids: Sequence[str], seqs: Sequence[str]) -> List[List[float]]:
-    """Full symmetric identity-distance matrix of the end-padded sequences."""
-    dm = DistanceCalculator("identity").get_distance(padded_alignment(ids, seqs))
-    n = len(ids)
-    return [[float(dm[i, j]) for j in range(n)] for i in range(n)]
+def make_tree_aligner() -> PairwiseAligner:
+    aligner = PairwiseAligner()
+    aligner.mode = "global"
+    aligner.substitution_matrix = tree_matrix()
+    aligner.open_gap_score = TREE_GAP_OPEN
+    aligner.extend_gap_score = TREE_GAP_EXTEND
+    return aligner
 
 
-def build_tree(ids: Sequence[str], seqs: Sequence[str], method: str = "UPGMA"):
-    """Bio.Phylo tree from identity distances; method 'UPGMA' or 'NJ'."""
+def matrix_letters(seq: str, alphabet: str) -> str:
+    """Residues missing from the substitution matrix (e.g. U, O, J) are scored as X."""
+    return "".join(c if c in alphabet else "X" for c in seq)
+
+
+def alignment_distances(ids: Sequence[str], seqs: Sequence[str]):
+    """
+    Distance matrix (1 - identity) from the global alignment of every pair.
+
+    Returns:
+        (distances, pairs): full symmetric matrix, and per pair
+        {i, j, score, identity, length} (length = alignment columns).
+    """
+    aligner = make_tree_aligner()
+    alphabet = aligner.substitution_matrix.alphabet
+    clean = [matrix_letters(s, alphabet) for s in seqs]
+    n = len(seqs)
+    d = [[0.0] * n for _ in range(n)]
+    pairs = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            if len(clean[i]) * len(clean[j]) > MAX_CELLS:
+                raise ValueError(f"{ids[i]} x {ids[j]} is too long to align (limit {MAX_CELLS:,} cells)")
+            best = aligner.align(clean[i], clean[j])[0]
+            top, bottom = str(best[0]), str(best[1])
+            same = sum(x == y and x != "-" for x, y in zip(top, bottom))
+            identity = same / len(top)
+            d[i][j] = d[j][i] = 1.0 - identity
+            pairs.append({"i": i, "j": j, "score": float(best.score), "identity": identity, "length": len(top),
+                          "aligned1": top, "aligned2": bottom})
+    return d, pairs
+
+
+def build_tree(ids: Sequence[str], seqs: Sequence[str], method: str = "UPGMA", distances=None):
+    """Bio.Phylo tree from alignment distances; method 'UPGMA' or 'NJ'."""
     if len(seqs) < 3:
         raise ValueError("Need at least 3 sequences for tree construction")
     if len(set(ids)) != len(ids):
         raise ValueError("Sequence ids must be unique to build a tree")
-    calculator = DistanceCalculator("identity")
-    dm = calculator.get_distance(padded_alignment(ids, seqs))
-    constructor = DistanceTreeConstructor(calculator)
+    if distances is None:
+        distances, _ = alignment_distances(ids, seqs)
+    dm = DistanceMatrix(list(ids), [distances[i][:i + 1] for i in range(len(ids))])
+    constructor = DistanceTreeConstructor()
     return constructor.upgma(dm) if method.upper() == "UPGMA" else constructor.nj(dm)
 
 
