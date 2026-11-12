@@ -77,7 +77,7 @@
 
 ### Installation
 ```bash
-# No installation required! Auto-installs dependencies on first run
+pip install -r requirements.txt
 python calcium_channel_analyzer.py
 ```
 
@@ -425,8 +425,7 @@ Export (HTML, Excel, figures, sequences)
 ### Getting Help
 1. Check **DOCUMENTATION.md** for detailed guides
 2. Review **example workflows** in this README
-3. See **DISCOVERY_TOOLS_GUIDE.md** for discovery methods
-4. Contact: George Dickinson, UC Irvine
+3. Contact: George Dickinson, UC Irvine
 
 ### Reporting Issues
 - Describe the error or unexpected behavior
