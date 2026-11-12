@@ -23,11 +23,9 @@ route('about', async () => {
   <p>BLAST and DIAMOND searches, genome-wide search, orthologs, HMM profiles, AlphaFold structure download and the 3D viewer,
     training and applying the ML classifiers, expression, interaction and pathway queries, and the advanced plot types.</p>
   <h2>The example sequences</h2>
-  <p>The example file <code>${esc(ex.file)}</code> holds ${ex.records.length} sequences with UniProt-style headers
-    (human Cav1.2, Cav2.1, RyR2, IP3R1; Arabidopsis CNGC2, TPC1, GLR1.1). They are ${Math.min(...lens)}-${Math.max(...lens)} residues long and are
-    not the real proteins: they are placeholder sequences built largely from homopolymer and short repeat runs (for example
-    long stretches of G, K or GQ), much shorter than the full-length channels named in the headers. They exercise every
-    analysis, but the results on them say nothing about those channels. For real analyses fetch the entries (local app) or paste your own FASTA.</p>
+  <p>The example file <code>${esc(ex.file)}</code> holds ${ex.records.length} reviewed UniProtKB/Swiss-Prot sequences
+    (${Math.min(...lens)}-${Math.max(...lens)} residues): human Cav1.2, Cav2.1, RyR2 and IP3R1, and Arabidopsis CNGC2, TPC1 and GLR1.1,
+    copied unchanged from UniProt (release 2026_04, CC BY 4.0; see <code>THIRD_PARTY.md</code>).</p>
   <h2>Run it yourself</h2>
   <pre>git clone https://github.com/gddickinson/calcium_channel_analyzer
 cd calcium_channel_analyzer

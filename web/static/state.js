@@ -39,7 +39,6 @@ export async function seqbar(count) {
   await getFasta();
   const where = isStatic() ? 'computed in your browser (JS port, tested against the Python code)' : 'computed by the Python code on this computer';
   return `<div class="seqbar"><span>Sequence set: <b>${esc(getSource())}</b>${count != null ? ` · ${count} sequences` : ''}</span>
-    ${getSource().startsWith('example') ? '<span>(placeholder sequences, <a href="#/about">see About</a>)</span>' : ''}
     <a href="#/sequences">change</a><span>· ${where}</span></div>`;
 }
 

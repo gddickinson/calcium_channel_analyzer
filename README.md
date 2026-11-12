@@ -328,8 +328,8 @@ python run_web.py            # http://127.0.0.1:8135 (local only)
 ```
 The local app runs every analysis in Python and can fetch sequences from NCBI protein or UniProt. On the static site the
 analyses run in the browser (`web/static/seq_engine.js`, `align_engine.js`, ports of the Python functions that node
-tests check against fixtures made by the Python code); fetching needs the local app. Note: `example_ca_channels.fasta`
-holds placeholder sequences (homopolymer and repeat runs), not the UniProt entries its headers name.
+tests check against fixtures made by the Python code); fetching needs the local app. `example_ca_channels.fasta` holds seven
+UniProtKB/Swiss-Prot sequences (CC BY 4.0, see THIRD_PARTY.md).
 
 Tests: `python -m pytest -q tests` (includes the node engine tests). Build the static site:
 `python scripts/build_static.py` (published by `.github/workflows/pages.yml` on push to main).
