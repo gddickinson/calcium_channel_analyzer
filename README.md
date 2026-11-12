@@ -306,6 +306,36 @@ Workflow:
 
 ---
 
+## 🌐 Web interface
+
+A web version of the sequence analyses: **https://gddickinson.github.io/calcium_channel_analyzer/** (static site) or
+locally with the full Python back end.
+
+| Domain motifs | Hydropathy & TM | Distance tree |
+|---|---|---|
+| ![Domain map](docs/img/domains.png) | ![Hydropathy](docs/img/hydropathy.png) | ![Tree](docs/img/tree.png) |
+| ![Home](docs/img/home.png) | ![Classification](docs/img/classify.png) | ![Alignment](docs/img/align.png) |
+
+Pages: **Sequences** (the example FASTA, or paste/open your own), **Domain motifs** (`detect_domains_in_sequence`,
+domain map and counts), **Hydropathy & TM** (Kyte-Doolittle, window 19, threshold 1.6), **Classification & features**
+(the rule-based classifier, electrophysiology labels and the 32 ML features), **Pairwise alignment** (the desktop app's
+PairwiseAligner settings) and **Distance tree** (identity distances, UPGMA / NJ).
+
+### Run the web app
+```bash
+pip install -r requirements-web.txt
+python run_web.py            # http://127.0.0.1:8135 (local only)
+```
+The local app runs every analysis in Python and can fetch sequences from NCBI protein or UniProt. On the static site the
+analyses run in the browser (`web/static/seq_engine.js`, `align_engine.js`, ports of the Python functions that node
+tests check against fixtures made by the Python code); fetching needs the local app. Note: `example_ca_channels.fasta`
+holds placeholder sequences (homopolymer and repeat runs), not the UniProt entries its headers name.
+
+Tests: `python -m pytest -q tests` (includes the node engine tests). Build the static site:
+`python scripts/build_static.py` (published by `.github/workflows/pages.yml` on push to main).
+
+---
+
 ## 📖 Complete Documentation
 
 ### Included Guides

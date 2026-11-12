@@ -1,0 +1,20 @@
+/* Calcium Channel Analyzer accents: cyan (membrane), amber (Ca2+ ions), violet. */
+:root { --accent:#37e8ff; --accent2:#ffb13d; --accent3:#b18cff; --glow:rgba(55,232,255,.13); }
+.mark { border-color:var(--accent); box-shadow:0 0 12px var(--accent), inset 0 0 0 4px var(--bg), inset 0 0 0 9px var(--accent2); }
+.seqbar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; font-size:13px; color:var(--mute); margin:0 0 14px; }
+.seqbar b { color:var(--ink); }
+.warnings { font-size:13px; color:var(--warn); margin:6px 0; }
+.dmap svg, .plot svg { display:block; width:100%; height:auto; }
+.legend { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:12px; margin:8px 0; }
+.legend label { display:inline-flex; align-items:center; gap:6px; margin:0; color:var(--ink); cursor:pointer; }
+.sw { display:inline-block; width:12px; height:12px; border-radius:2px; border:1px solid rgba(0,0,0,.4); }
+.heat td.v { text-align:right; font:12px var(--mono); }
+.heat td.click { cursor:pointer; } .heat td.click:hover { outline:1px solid var(--accent); }
+.heat td.sel { outline:2px solid var(--accent2); }
+pre.aln { font-size:12px; line-height:1.35; white-space:pre; overflow-x:auto; }
+.mini { font:12px var(--mono); }
+td.seqcell { font:12px var(--mono); word-break:break-all; max-width:340px; }
+.ctlrow { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; }
+.ctlrow > * { flex:1; min-width:160px; }
+.ctlrow > .ctl-btn { flex:none; min-width:0; }
+.yes { color:var(--good); } .no { color:var(--mute); }
