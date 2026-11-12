@@ -91,3 +91,30 @@ class TestFamilyPrediction:
     def test_tpc_detected(self):
         result = predict_family_from_description("Two-pore channel 1")
         assert result == "TPC"
+
+
+class TestPositionsAndMinLength:
+    """1-based inclusive positions; every regex match kept unless a minimum length is asked for."""
+
+    def test_positions_are_one_based_inclusive(self):
+        seq = "AAATLLGLGAAAA"  # Pore_loop TLLGLG at 0-based 3..8
+        hit = [r for r in detect_domains_in_sequence(seq, "p") if r['domain'] == 'Pore_loop'][0]
+        assert hit['position'] == "4-9"
+        assert (hit['start'], hit['end']) == (4, 9)
+        assert seq[hit['start'] - 1:hit['end']] == hit['match']
+
+    def test_short_matches_kept_by_default(self):
+        # Ca_selectivity matches DAAEAAD (7 aa) but its pattern min_length is 8
+        seq = "GGGDAAEAADGGG"
+        hits = [r for r in detect_domains_in_sequence(seq, "s") if r['domain'] == 'Ca_selectivity']
+        assert hits and len(hits[0]['match']) == 7
+
+    def test_pattern_min_length_on_request(self):
+        seq = "GGGDAAEAADGGG"
+        hits = detect_domains_in_sequence(seq, "s", use_pattern_min_length=True)
+        assert not [r for r in hits if r['domain'] == 'Ca_selectivity']
+
+    def test_explicit_min_length(self):
+        seq = "GGGDAAEAADGGG"
+        assert not detect_domains_in_sequence(seq, "s", min_length=50)
+        assert detect_domains_in_sequence(seq, "s", min_length=7)

@@ -1,6 +1,6 @@
 // Domain motifs: domain_detection.detect_domains_in_sequence on every sequence, drawn as a domain map, with the
 // patterns from config.py and a per-sequence count matrix.
-import { $, $$, api, app, esc, route } from './core.js';
+import { $, $$, api, app, esc, go, route } from './core.js';
 import { analyse, seqbar, warningsHtml } from './state.js';
 import { color, label, svg } from './ui.js';
 
@@ -13,8 +13,8 @@ function domainMap(r, on) {
     body += `<text x="${left - 8}" y="${y + 4}" text-anchor="end" fill="#c6d4ee" font-size="12">${esc(label(id))}</text>`;
     body += `<line x1="${sx(0)}" x2="${sx(L)}" y1="${y}" y2="${y}" stroke="#94a3c6" stroke-width="2"/>`;
     for (const h of r.hits) if (h.sequence === id && on.has(h.domain)) {
-      body += `<rect x="${sx(h.start)}" y="${y - 8}" width="${Math.max(1.2, sx(h.end) - sx(h.start))}" height="16" fill="${color(h.domain)}"
-        fill-opacity=".8"><title>${esc(h.domain)} ${h.start + 1}-${h.end}: ${esc(h.match)} (score ${h.score})</title></rect>`;
+      body += `<rect x="${sx(h.start - 1)}" y="${y - 8}" width="${Math.max(1.2, sx(h.end) - sx(h.start - 1))}" height="16" fill="${color(h.domain)}"
+        fill-opacity=".8"><title>${esc(h.domain)} ${h.start}-${h.end}: ${esc(h.match)} (score ${h.score})</title></rect>`;
     }
   });
   const ay = 16 + r.order.length * rowH;
@@ -26,8 +26,9 @@ function domainMap(r, on) {
   return svg(W, ay + 22, body, 'Domain map: motif matches along each sequence');
 }
 
-route('domains', async () => {
-  const [cfg, r] = await Promise.all([api('/config'), analyse('domains')]);
+route('domains', async (args, q) => {
+  const useMin = q.min === '1';
+  const [cfg, r] = await Promise.all([api('/config'), analyse('domains', { use_min_length: useMin })]);
   const names = Object.keys(cfg.domain_patterns);
   const on = new Set(names);
   const counts = id => names.map(n => r.hits.filter(h => h.sequence === id && h.domain === n).length);
@@ -35,9 +36,10 @@ route('domains', async () => {
   <h1>Domain motifs</h1>
   ${await seqbar(r.order.length)}
   <p class="lead">Regex signatures from <code>config.py</code>, matched with <code>detect_domains_in_sequence</code>
-    (non-overlapping matches, kept when at least the pattern's minimum length). Short, permissive patterns match often in
-    any protein: read a hit as a motif match, not a confirmed domain.</p>
+    (every non-overlapping match, as the desktop app's Detect Domains; optionally only matches at least the pattern's
+    minimum length). Short, permissive patterns match often in any protein: read a hit as a motif match, not a confirmed domain.</p>
   ${warningsHtml(r.warnings)}
+  <label><input type="checkbox" id="minlen" ${useMin ? 'checked' : ''}> Keep only matches at least each pattern's minimum length</label>
   <div class="panel"><div class="legend" id="lg">${names.map(n => `<label><input type="checkbox" data-d="${n}" checked>
     <span class="sw" style="background:${color(n)}"></span>${esc(n)}</label>`).join('')}</div>
     <div class="dmap" id="map"></div><p class="small mute">Hover a block for its position (1-based), residues and score.</p></div>
@@ -57,10 +59,11 @@ route('domains', async () => {
     const d = $('#flt').value, rows = r.hits.filter(h => !d || h.domain === d), shown = rows.slice(0, 400);
     $('#nh').textContent = `(${rows.length}${rows.length > shown.length ? `, first ${shown.length} shown` : ''})`;
     $('#hits').innerHTML = `<table><thead><tr><th>Sequence</th><th>Domain</th><th>Position (1-based)</th><th>Match</th><th>Score</th></tr></thead><tbody>${
-      shown.map(h => `<tr><td>${esc(label(h.sequence))}</td><td>${esc(h.domain)}</td><td>${h.start + 1}-${h.end}</td>
+      shown.map(h => `<tr><td>${esc(label(h.sequence))}</td><td>${esc(h.domain)}</td><td>${h.start}-${h.end}</td>
       <td class="seqcell">${esc(h.match)}</td><td>${h.score}</td></tr>`).join('')}</tbody></table>`;
   };
   $$('#lg input').forEach(cb => { cb.onchange = () => { if (cb.checked) on.add(cb.dataset.d); else on.delete(cb.dataset.d); draw(); }; });
   $('#flt').onchange = table;
+  $('#minlen').onchange = e => go(e.target.checked ? '#/domains?min=1' : '#/domains');
   draw(); table();
 });

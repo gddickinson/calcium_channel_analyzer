@@ -16,17 +16,27 @@ def detect_domains_in_sequence(
     sequence: str,
     seq_id: str = "unknown",
     domain_patterns: Optional[Dict] = None,
+    min_length: Optional[int] = None,
+    use_pattern_min_length: bool = False,
 ) -> List[Dict]:
     """
     Detect conserved domains in a protein sequence.
+
+    Every non-overlapping regex match is kept (as the desktop app's Detect
+    Domains does) unless a minimum length is asked for.
 
     Args:
         sequence: Amino acid sequence string.
         seq_id: Identifier for the sequence.
         domain_patterns: Domain pattern dict (defaults to DOMAIN_PATTERNS).
+        min_length: If given, drop matches shorter than this many residues.
+        use_pattern_min_length: If True, drop matches shorter than each
+            pattern's own 'min_length'.
 
     Returns:
-        List of dicts with keys: sequence, domain, position, match, score.
+        List of dicts with keys: sequence, domain, position, start, end,
+        match, score. Positions are 1-based and inclusive: 'position' is
+        "start-end" and sequence[start - 1:end] == match.
     """
     if domain_patterns is None:
         domain_patterns = DOMAIN_PATTERNS
@@ -36,17 +46,21 @@ def detect_domains_in_sequence(
         pattern = domain_info['pattern']
         for match in re.finditer(pattern, sequence):
             matched_seq = match.group()
-            if len(matched_seq) >= domain_info.get('min_length', 1):
-                score = calculate_domain_score(
-                    matched_seq, domain_name, domain_patterns
-                )
-                results.append({
-                    'sequence': seq_id,
-                    'domain': domain_name,
-                    'position': f"{match.start()}-{match.end()}",
-                    'match': matched_seq,
-                    'score': f"{score:.1f}",
-                })
+            if min_length is not None and len(matched_seq) < min_length:
+                continue
+            if use_pattern_min_length and len(matched_seq) < domain_info.get('min_length', 1):
+                continue
+            score = calculate_domain_score(matched_seq, domain_name, domain_patterns)
+            start, end = match.start() + 1, match.end()
+            results.append({
+                'sequence': seq_id,
+                'domain': domain_name,
+                'position': f"{start}-{end}",
+                'start': start,
+                'end': end,
+                'match': matched_seq,
+                'score': f"{score:.1f}",
+            })
     return results
 
 

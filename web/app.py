@@ -29,6 +29,7 @@ class Fasta(BaseModel):
     window: int = TM_WINDOW
     threshold: float = TM_THRESHOLD
     method: str = "UPGMA"
+    use_min_length: bool = False
 
 
 class FetchRequest(BaseModel):
@@ -83,7 +84,7 @@ def parse(req: Fasta):
 
 @app.post("/api/domains")
 def domains(req: Fasta):
-    return run(analysis.domains, req.fasta)
+    return run(analysis.domains, req.fasta, req.use_min_length)
 
 
 @app.post("/api/hydropathy")

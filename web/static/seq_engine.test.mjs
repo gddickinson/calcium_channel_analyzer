@@ -11,6 +11,7 @@ let n = 0;
 for (const [name, c] of Object.entries(fx.cases)) {
   close(parseBundle(c.fasta), c.parse, name + '.parse'); n++;
   close(domainsBundle(c.fasta, cfg), c.domains, name + '.domains'); n++;
+  close(domainsBundle(c.fasta, cfg, true), c.domains_min_length, name + '.domains_min'); n++;
   close(classifyBundle(c.fasta, cfg), c.classify, name + '.classify'); n++;
   c.hydropathy.forEach((h, i) => { close(hydropathyBundle(c.fasta, cfg, i), h, `${name}.hydropathy[${i}]`); n++; });
   c.hydropathy_w11_t1.forEach((h, i) => { close(hydropathyBundle(c.fasta, cfg, i, 11, 1.0), h, `${name}.hyd11[${i}]`); n++; });

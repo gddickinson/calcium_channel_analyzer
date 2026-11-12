@@ -75,16 +75,18 @@ export function domainScore(match, name, patterns) {
   return lengthScore + hydro;
 }
 
-// domain_detection.detect_domains_in_sequence (non-overlapping regex matches, kept if >= min_length)
-export function detectDomains(seq, id, patterns) {
+// domain_detection.detect_domains_in_sequence: every non-overlapping regex match, unless minLength or
+// usePatternMinLength asks for a minimum; positions 1-based and inclusive.
+export function detectDomains(seq, id, patterns, { minLength = null, usePatternMinLength = false } = {}) {
   const out = [];
   for (const [name, info] of Object.entries(patterns)) {
     for (const m of seq.matchAll(new RegExp(info.pattern, 'g'))) {
       const s = m[0];
-      if (s.length >= (info.min_length ?? 1)) {
-        out.push({ sequence: id, domain: name, position: `${m.index}-${m.index + s.length}`, match: s,
-          score: fmt1(domainScore(s, name, patterns)), start: m.index, end: m.index + s.length });
-      }
+      if (minLength !== null && s.length < minLength) continue;
+      if (usePatternMinLength && s.length < (info.min_length ?? 1)) continue;
+      const start = m.index + 1, end = m.index + s.length;
+      out.push({ sequence: id, domain: name, position: `${start}-${end}`, start, end, match: s,
+        score: fmt1(domainScore(s, name, patterns)) });
     }
   }
   return out;
@@ -197,10 +199,10 @@ export function parseBundle(fasta) {
   records.forEach(r => { r.length = r.sequence.length; r.family = familyFromDescription(r.description); });
   return { records, warnings };
 }
-export function domainsBundle(fasta, cfg) {
+export function domainsBundle(fasta, cfg, useMinLength = false) {
   const { records, warnings } = parseFasta(fasta);
-  return { lengths: Object.fromEntries(records.map(r => [r.id, r.sequence.length])), order: records.map(r => r.id),
-    hits: records.flatMap(r => detectDomains(r.sequence, r.id, cfg.domain_patterns)), warnings };
+  return { use_min_length: useMinLength, lengths: Object.fromEntries(records.map(r => [r.id, r.sequence.length])), order: records.map(r => r.id),
+    hits: records.flatMap(r => detectDomains(r.sequence, r.id, cfg.domain_patterns, { usePatternMinLength: useMinLength })), warnings };
 }
 export function hydropathyBundle(fasta, cfg, index = 0, window = cfg.tm.window, threshold = cfg.tm.threshold) {
   const { records, warnings } = parseFasta(fasta);

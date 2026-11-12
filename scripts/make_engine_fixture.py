@@ -38,6 +38,7 @@ def bundle(fasta: str) -> dict:
         "fasta": fasta,
         "parse": analysis.parse(fasta),
         "domains": analysis.domains(fasta),
+        "domains_min_length": analysis.domains(fasta, True),
         "classify": analysis.classify(fasta),
         "hydropathy": [analysis.hydropathy(fasta, i) for i in range(n)],
         "hydropathy_w11_t1": [analysis.hydropathy(fasta, i, 11, 1.0) for i in range(n)],

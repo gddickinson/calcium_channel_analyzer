@@ -51,15 +51,14 @@ def parse(fasta: str) -> dict:
     return {"records": records, "warnings": warnings}
 
 
-def domains(fasta: str) -> dict:
-    """domain_detection.detect_domains_in_sequence on every record (positions 0-based, end exclusive)."""
+def domains(fasta: str, use_min_length: bool = False) -> dict:
+    """domain_detection.detect_domains_in_sequence on every record (positions 1-based, inclusive). Every match is kept
+    unless use_min_length, which applies each pattern's min_length."""
     records, warnings = parse_fasta(fasta)
     hits = []
     for r in records:
-        for h in detect_domains_in_sequence(r["sequence"], r["id"]):
-            start, end = (int(x) for x in h["position"].split("-"))
-            hits.append({**h, "start": start, "end": end})
-    return {"lengths": {r["id"]: len(r["sequence"]) for r in records}, "order": [r["id"] for r in records],
+        hits += detect_domains_in_sequence(r["sequence"], r["id"], use_pattern_min_length=use_min_length)
+    return {"use_min_length": use_min_length, "lengths": {r["id"]: len(r["sequence"]) for r in records}, "order": [r["id"] for r in records],
             "hits": hits, "warnings": warnings}
 
 
