@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { close } from './compare.test.mjs';
-import { classifyBundle, domainsBundle, fmt1, hydropathyBundle, parseBundle, parseFasta } from './seq_engine.js';
+import { classifyBundle, domainsBundle, fmt1, pySum, hydropathyBundle, parseBundle, parseFasta } from './seq_engine.js';
 
 const fx = JSON.parse(readFileSync(new URL('../../tests/fixtures/engine_fixture.json', import.meta.url)));
 const cfg = fx.config;
@@ -17,6 +17,8 @@ for (const [name, c] of Object.entries(fx.cases)) {
 }
 // Python's round-half-even on exact ties, and plain rounding otherwise
 assert.equal(fmt1(51.25), '51.2'); assert.equal(fmt1(51.75), '51.8'); assert.equal(fmt1(0.15), '0.1'); assert.equal(fmt1(75), '75.0');
+// CPython 3.12 sum() is compensated: sum([0.1] * 10) == 1.0 exactly
+assert.equal(pySum(Array(10).fill(0.1)), 1.0);
 assert.throws(() => parseFasta('MKV'), /before the first/);
 assert.throws(() => parseFasta('  '), /No sequences/);
 console.log(`seq_engine: ${n} fixture comparisons ok`);

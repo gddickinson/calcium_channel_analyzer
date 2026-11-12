@@ -15,6 +15,18 @@ export function fmt1(x) {
   return x.toFixed(1);
 }
 
+// Python 3.12+ sum() of floats: Neumaier-compensated (CPython builtin_sum_impl), so window sums match the Python
+// code to the last bit (a plain running sum differs in the last digit and can flip a "score > threshold" test).
+export function pySum(values) {
+  let f = 0, c = 0;
+  for (const x of values) {
+    const t = f + x;
+    c += Math.abs(f) >= Math.abs(x) ? (f - t) + x : (x - t) + f;
+    f = t;
+  }
+  return (c && Number.isFinite(c)) ? f + c : f;
+}
+
 // sequence_analysis.parse_fasta -> { records, warnings }; throws Error with the same messages.
 export function parseFasta(text) {
   const records = [], warnings = [];
@@ -99,8 +111,7 @@ export function familyFromDescription(desc) {
 export function mlFeatures(seq, cfg) {
   const n = seq.length, f = [n];
   for (const aa of cfg.amino_acids) f.push(n > 0 ? (seq.split(aa).length - 1) / n : 0.0);
-  let h = 0;
-  for (const aa of seq) h += cfg.kd_hydrophobicity[aa] ?? 0;
+  const h = pySum([...seq].map(aa => cfg.kd_hydrophobicity[aa] ?? 0));
   f.push(n > 0 ? h / n : 0.0);
   for (const info of Object.values(cfg.domain_patterns)) f.push(new RegExp(info.pattern).test(seq) ? 1.0 : 0.0);
   return f;
@@ -110,9 +121,9 @@ export function mlFeatures(seq, cfg) {
 export function hydropathyProfile(seq, window, kd) {
   const positions = [], scores = [];
   for (let i = 0; i + window <= seq.length; i++) {
-    let s = 0;
-    for (let k = i; k < i + window; k++) s += kd[seq[k]] ?? 0;
-    scores.push(s / window); positions.push(i + Math.floor(window / 2));
+    const w = new Array(window);
+    for (let k = 0; k < window; k++) w[k] = kd[seq[i + k]] ?? 0;
+    scores.push(pySum(w) / window); positions.push(i + Math.floor(window / 2));
   }
   return { positions, scores };
 }
